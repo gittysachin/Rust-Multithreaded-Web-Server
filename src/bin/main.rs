@@ -4,14 +4,26 @@ use std::net::TcpStream;
 use std::fs;
 use std::thread;
 use std::time::Duration;
+use hello::ThreadPool;
 
 fn main(){
     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+    let pool = ThreadPool::new(4);
 
     for stream in listener.incoming() {
         let _stream = stream.unwrap();
 
-        handle_connection(_stream);
+        // Code structure if we could spawn the thread for each request
+        // We can create our own ThreadPool instead 
+        
+        // A thread pool is a group of spawned threads that are waiting and ready to handle a task. When the program receives a new task, it assigns one of the threads in the pool to the task, and that thread will process the task. The remaining threads in the pool are available to handle any other tasks that come in while the first thread is processing.
+        // When the first thread is done processing its task, it’s returned to the pool of idle threads, ready to handle a new task. A thread pool allows you to process connections concurrently, increasing the throughput of your server.
+        // Rather than spawning unlimited threads, we’ll have a fixed number of threads waiting in the pool. As requests come in, they’ll be sent to the pool for processing. The pool will maintain a queue of incoming requests.
+
+        // thread::spawn(|| {
+        pool.execute(|| {
+            handle_connection(_stream);
+        });
     }
 }
 
