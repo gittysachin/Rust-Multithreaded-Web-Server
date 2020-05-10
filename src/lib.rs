@@ -5,10 +5,15 @@ use std::sync::{mpsc, Arc, Mutex};
 
 pub struct ThreadPool {
     workers: Vec<Worker>,
-    sender: mpsc::Sender<Job>,
+    sender: mpsc::Sender<Message>,
 }
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
+
+enum Message {
+    NewJob(Job),
+    Terminate,
+}
 
 impl ThreadPool {
     /// Create a new ThreadPool
@@ -40,7 +45,7 @@ impl ThreadPool {
     {
         let job = Box::new(f);
 
-        self.sender.send(job).unwrap();
+        self.sender.send(Message::NewJob(job)).unwrap();
     }
 
     // pub fn spawn<F, T>(f: F) -> JoinHandle<T>
@@ -50,22 +55,58 @@ impl ThreadPool {
 
 }
 
+// Implementing the Drop Trait on ThreadPool
+
+impl Drop for ThreadPool {
+    fn drop (&mut self) {
+        println!("Senting terminate message to all workers.");
+
+        for _ in &self.workers {
+            self.sender.send(Message::Terminate).unwrap();
+        }
+
+        println!("Sthutting down all workers.");
+
+        for worker in &mut self.workers {
+            println!("Shutting down worker {}", worker.id);
+
+            if let Some(thread) = worker.thread.take() {
+                thread.join().unwrap();
+            }
+        }
+    }
+}
+
+// Signaling to the Threads to Stop Listening for Jobs
+
 struct Worker {
     id: usize,
-    thread: thread::JoinHandle<()>,
+    thread: Option<thread::JoinHandle<()>>,
 }
 
 impl Worker {
-    fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
-        let thread = thread::spawn(move || {
-            while let Ok(Job) = receiver.lock().unwrap().recv() {
-                println!("Worker {} got a job; executing.", id);
-                
-                Job();
+    fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Message>>>) -> Worker {
+        let thread = thread::spawn(move || loop {
+            let message = receiver.lock().unwrap().recv().unwrap();
+
+            match message {
+                Message::NewJob(job) => {
+                    println!("Worker {} got a job; executing.", id);
+
+                    job();
+                }
+                Message::Terminate => {
+                    println!("Worker {} was told to terminate.", id);
+
+                    break;
+                }
             }
         });
 
-        Worker { id, thread }
+        Worker {
+            id,
+            thread: Some(thread),
+        }
     }
 }
 

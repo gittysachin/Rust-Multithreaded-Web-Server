@@ -10,7 +10,7 @@ fn main(){
     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
     let pool = ThreadPool::new(4);
 
-    for stream in listener.incoming() {
+    for stream in listener.incoming().take(2) { // Shut down the server after serving two requests by exiting the loop
         let _stream = stream.unwrap();
 
         // Code structure if we could spawn the thread for each request
@@ -25,6 +25,8 @@ fn main(){
             handle_connection(_stream);
         });
     }
+
+    println!("Shutting down.");
 }
 
 fn handle_connection(mut stream: TcpStream){
